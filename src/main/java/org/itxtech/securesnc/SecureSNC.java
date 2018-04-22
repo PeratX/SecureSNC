@@ -6,17 +6,12 @@ import org.apache.commons.net.ftp.FTPReply;
 import org.itxtech.securesnc.util.Logger;
 import org.shredzone.acme4j.*;
 import org.shredzone.acme4j.challenge.Http01Challenge;
-import org.shredzone.acme4j.exception.AcmeException;
 import org.shredzone.acme4j.util.CSRBuilder;
+import org.shredzone.acme4j.util.KeyPairUtils;
 
-import java.io.ByteArrayInputStream;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
+import java.io.*;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.List;
 
@@ -62,6 +57,12 @@ public class SecureSNC {
         pass.setRequired(true);
         options.addOption(pass);
 
+        Option root = new Option("r", "root", true, "Root of your website, default = /wwwroot");
+        options.addOption(root);
+
+        Option test = new Option("t", "test", false, "Enable test mode, this will obtain a fake cert");
+        options.addOption(test);
+
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
         CommandLine cmd;
@@ -85,14 +86,21 @@ public class SecureSNC {
         }
     }
 
+    private static final String PRODUCTION_SERVER = "acme://letsencrypt.org";
+    private static final String TESTING_SERVER = "acme://letsencrypt.org/staging";
+
     private static String domain;
     private static String address;
     private static String user;
     private static String pass;
     private static String ftpUser;
     private static String ftpPass;
+    private static String root;
+    private static boolean test;
 
     private static void run(CommandLine cmd) throws Exception{
+        test = cmd.hasOption("test");
+        root = cmd.getOptionValue("root") == null ? "/wwwroot" : cmd.getOptionValue("root");
         domain = cmd.getOptionValue("domain");
         address = cmd.getOptionValue("address");
         user = cmd.getOptionValue("user");
@@ -104,9 +112,9 @@ public class SecureSNC {
         List<String> domainList = Arrays.asList(domains);
 
         Logger.info("Obtaining certificate for " + domain);
-        Logger.info("Now using Let's Encrypt ACME");
-        Session session = new Session("acme://letsencrypt.org");
-        session.setProxy(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", 1080)));
+        Logger.info("Now using " + (test ? "Let's Encrypt testing server" : "Let's Encrypt production server"));
+        Session session = new Session(test ? TESTING_SERVER : PRODUCTION_SERVER);
+        //session.setProxy(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", 1080)));
         Logger.info("Creating key pair");
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
@@ -130,6 +138,10 @@ public class SecureSNC {
 
         Logger.info("Creating domain key pair");
         KeyPair domainKeyPair = keyPairGenerator.generateKeyPair();
+        FileWriter fileWriter = new FileWriter("private.key");
+        KeyPairUtils.writeKeyPair(domainKeyPair, fileWriter);
+        fileWriter.close();
+        Logger.info("Private key saved");
 
         CSRBuilder csrb = new CSRBuilder();
         for (String d : domainList){
@@ -137,8 +149,6 @@ public class SecureSNC {
         }
         csrb.setOrganization("SNCIDC");
         csrb.sign(domainKeyPair);
-        csrb.write(new FileWriter("private.key"));
-        Logger.info("CSR saved");
 
         Logger.info("Finalizing the order");
         order.execute(csrb.getEncoded());
@@ -150,7 +160,18 @@ public class SecureSNC {
 
         Logger.info("Writing the certificate");
         Certificate cert = order.getCertificate();
-        cert.writeCertificate(new FileWriter("cert.crt"));
+        FileWriter crt = new FileWriter("cert.crt");
+        cert.writeCertificate(crt);
+        crt.close();
+
+        ByteArrayOutputStream privateKey = new ByteArrayOutputStream();
+        csrb.write(privateKey);
+        ByteArrayOutputStream publicKey = new ByteArrayOutputStream();
+        OutputStreamWriter writer = new OutputStreamWriter(publicKey);
+        cert.writeCertificate(writer);
+        writer.close();
+
+        uploadCert(privateKey.toString(), publicKey.toString());
     }
 
     private static void processAuth(Authorization auth) throws Exception{
@@ -171,7 +192,7 @@ public class SecureSNC {
             return;
         }
         ftpClient.enterLocalActiveMode();
-        ftpClient.changeWorkingDirectory("/wwwroot");
+        ftpClient.changeWorkingDirectory(root);
         ftpClient.makeDirectory(".well-known");
         ftpClient.changeWorkingDirectory(".well-known");
         ftpClient.makeDirectory("acme-challenge");
@@ -192,6 +213,11 @@ public class SecureSNC {
         }
 
         Logger.info("Challenge completed");
+    }
 
+    private static void uploadCert(String privateKey, String publicKey){
+        Logger.info("Uploading keys");
+        Logger.info("Private key: " + privateKey);
+        Logger.info("Public key: " + publicKey);
     }
 }
