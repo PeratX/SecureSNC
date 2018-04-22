@@ -1,17 +1,24 @@
 package org.itxtech.securesnc;
 
 import org.apache.commons.cli.*;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPReply;
 import org.itxtech.securesnc.util.Logger;
 import org.shredzone.acme4j.*;
 import org.shredzone.acme4j.challenge.Http01Challenge;
+import org.shredzone.acme4j.exception.AcmeException;
+import org.shredzone.acme4j.util.CSRBuilder;
 
+import java.io.ByteArrayInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
-import java.net.SocketAddress;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.time.Duration;
-import java.time.Instant;
+import java.security.cert.X509Certificate;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  *
@@ -78,21 +85,28 @@ public class SecureSNC {
         }
     }
 
-    private static void run(CommandLine cmd) throws Exception{
-        String domain = cmd.getOptionValue("domain");
-        String address = cmd.getOptionValue("address");
-        String user = cmd.getOptionValue("user");
-        String pass = cmd.getOptionValue("pass");
-        String ftpUser = cmd.getOptionValue("ftp-user");
-        String ftpPass = cmd.getOptionValue("ftp-pass");
+    private static String domain;
+    private static String address;
+    private static String user;
+    private static String pass;
+    private static String ftpUser;
+    private static String ftpPass;
 
-        /*String[] domains = domain.split(",");
-        List domainList = Arrays.asList(domains);*/
+    private static void run(CommandLine cmd) throws Exception{
+        domain = cmd.getOptionValue("domain");
+        address = cmd.getOptionValue("address");
+        user = cmd.getOptionValue("user");
+        pass = cmd.getOptionValue("pass");
+        ftpUser = cmd.getOptionValue("ftp-user");
+        ftpPass = cmd.getOptionValue("ftp-pass");
+
+        String[] domains = domain.split(",");
+        List<String> domainList = Arrays.asList(domains);
 
         Logger.info("Obtaining certificate for " + domain);
         Logger.info("Now using Let's Encrypt ACME");
         Session session = new Session("acme://letsencrypt.org");
-        //session.setProxy(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", 1080)));
+        session.setProxy(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", 1080)));
         Logger.info("Creating key pair");
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
@@ -106,22 +120,78 @@ public class SecureSNC {
         Account account = login.getAccount();
         Logger.info("Ordering certificates");
         Order order = account.newOrder()
-                .domains(domain)
-                .notAfter(Instant.now().plus(Duration.ofDays(20L)))
+                .domains(domains)
                 .create();
         for (Authorization auth : order.getAuthorizations()) {
             if (auth.getStatus() != Status.VALID) {
                 processAuth(auth);
             }
         }
+
+        Logger.info("Creating domain key pair");
+        KeyPair domainKeyPair = keyPairGenerator.generateKeyPair();
+
+        CSRBuilder csrb = new CSRBuilder();
+        for (String d : domainList){
+            csrb.addDomain(d);
+        }
+        csrb.setOrganization("SNCIDC");
+        csrb.sign(domainKeyPair);
+        csrb.write(new FileWriter("private.key"));
+        Logger.info("CSR saved");
+
+        Logger.info("Finalizing the order");
+        order.execute(csrb.getEncoded());
+
+        while (order.getStatus() != Status.VALID) {
+            Thread.sleep(3000L);
+            order.update();
+        }
+
+        Logger.info("Writing the certificate");
+        Certificate cert = order.getCertificate();
+        cert.writeCertificate(new FileWriter("cert.crt"));
     }
 
-    private static void processAuth(Authorization auth){
+    private static void processAuth(Authorization auth) throws Exception{
         Logger.info("Processing authorization for " + auth.getDomain());
         Http01Challenge challenge = auth.findChallenge(Http01Challenge.TYPE);
         String token = challenge.getToken();
         String content = challenge.getAuthorization();
         Logger.info("Token: " + token);
         Logger.info("Content: " + content);
+        Logger.info("Connecting FTP server");
+
+        FTPClient ftpClient = new FTPClient();
+        ftpClient.setControlEncoding("UTF-8");
+        ftpClient.connect(address, 21);
+        ftpClient.login(ftpUser, ftpPass);
+        if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())){
+            Logger.info("Failed to connect to ftp server: " + address);
+            return;
+        }
+        ftpClient.enterLocalActiveMode();
+        ftpClient.changeWorkingDirectory("/wwwroot");
+        ftpClient.makeDirectory(".well-known");
+        ftpClient.changeWorkingDirectory(".well-known");
+        ftpClient.makeDirectory("acme-challenge");
+        ftpClient.changeWorkingDirectory("acme-challenge");
+        if (!ftpClient.storeFile(token, new ByteArrayInputStream(content.getBytes()))){
+            Logger.info("Failed to upload challenge");
+            ftpClient.logout();
+            return;
+        }
+        ftpClient.logout();
+        Logger.info("Upload completed");
+        Logger.info("Triggering challenge");
+        challenge.trigger();
+
+        while (auth.getStatus() != Status.VALID) {
+            Thread.sleep(3000L);
+            auth.update();
+        }
+
+        Logger.info("Challenge completed");
+
     }
 }
