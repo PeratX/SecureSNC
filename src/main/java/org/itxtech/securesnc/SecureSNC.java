@@ -1,19 +1,10 @@
 package org.itxtech.securesnc;
 
 import org.apache.commons.cli.*;
-import org.apache.commons.net.ftp.FTPClient;
-import org.apache.commons.net.ftp.FTPReply;
 import org.itxtech.securesnc.util.Logger;
-import org.shredzone.acme4j.*;
-import org.shredzone.acme4j.challenge.Http01Challenge;
-import org.shredzone.acme4j.util.CSRBuilder;
-import org.shredzone.acme4j.util.KeyPairUtils;
 
-import java.io.*;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.util.Arrays;
-import java.util.List;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 
 /**
  *
@@ -41,11 +32,11 @@ public class SecureSNC {
         address.setRequired(true);
         options.addOption(address);
 
-        Option fuser = new Option("fu", "ftp-user", true, "Username of FTP server");
+        Option fuser = new Option("u", "ftp-user", true, "Username of FTP server");
         fuser.setRequired(true);
         options.addOption(fuser);
 
-        Option fpass = new Option("fp", "ftp-pass", true, "Password of FTP server");
+        Option fpass = new Option("p", "ftp-pass", true, "Password of FTP server");
         fpass.setRequired(true);
         options.addOption(fpass);
 
@@ -54,6 +45,9 @@ public class SecureSNC {
 
         Option test = new Option("t", "test", false, "Enable test mode, this will obtain a fake cert");
         options.addOption(test);
+
+        Option proxy = new Option("y", "proxy", false, "Apply a proxy, example: socks://127.0.0.1:1080");
+        options.addOption(proxy);
 
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
@@ -78,158 +72,41 @@ public class SecureSNC {
         }
     }
 
-    private static final String PRODUCTION_SERVER = "acme://letsencrypt.org";
-    private static final String TESTING_SERVER = "acme://letsencrypt.org/staging";
-
-    private static String domain;
-    private static String address;
-    private static String ftpUser;
-    private static String ftpPass;
-    private static String root;
-    private static boolean test;
-
     private static void run(CommandLine cmd) throws Exception{
-        test = cmd.hasOption("test");
-        root = cmd.getOptionValue("root") == null ? "/wwwroot" : cmd.getOptionValue("root");
-        domain = cmd.getOptionValue("domain");
-        address = cmd.getOptionValue("address");
-        ftpUser = cmd.getOptionValue("ftp-user");
-        ftpPass = cmd.getOptionValue("ftp-pass");
-
-        String[] domains = domain.split(",");
-        List<String> domainList = Arrays.asList(domains);
-
-        Logger.info("Obtaining certificate for " + domain);
-        Logger.info("Now using " + (test ? "Let's Encrypt testing server" : "Let's Encrypt production server"));
-        Session session = new Session(test ? TESTING_SERVER : PRODUCTION_SERVER);
-        //session.setProxy(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", 1080)));
-        Logger.info("Creating key pair");
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-        keyPairGenerator.initialize(2048);
-        KeyPair keyPair = keyPairGenerator.generateKeyPair();
-        Logger.info("Creating account and logging in");
-        Login login = new AccountBuilder()
-                .addContact("mailto:ssl@sncidc.com")
-                .agreeToTermsOfService()
-                .useKeyPair(keyPair)
-                .createLogin(session);
-        Account account = login.getAccount();
-        Logger.info("Ordering certificates");
-        Order order = account.newOrder()
-                .domains(domains)
-                .create();
-        for (Authorization auth : order.getAuthorizations()) {
-            if (auth.getStatus() != Status.VALID) {
-                processAuth(auth);
+        Application app = new Application(cmd.getOptionValue("domain"),
+                cmd.getOptionValue("address"),
+                cmd.getOptionValue("ftp-user"),
+                cmd.getOptionValue("ftp-pass"),
+                cmd.getOptionValue("root") == null ? "/wwwroot" : cmd.getOptionValue("root"),
+                cmd.hasOption("test"));
+        if (cmd.getOptionValue("proxy") != null) {
+            String[] proxy = cmd.getOptionValue("proxy").split("://");
+            if (proxy.length != 2) {
+                Logger.error("Invalid proxy");
+            } else {
+                Proxy.Type type;
+                switch (proxy[0].toLowerCase()) {
+                    case "socks":
+                        type = Proxy.Type.SOCKS;
+                        break;
+                    case "http":
+                        type = Proxy.Type.HTTP;
+                        break;
+                    default:
+                        type = null;
+                }
+                if (type == null) {
+                    Logger.error("Invalid proxy type: " + proxy[0].toLowerCase());
+                } else {
+                    String[] addr = proxy[1].split(":");
+                    if (addr.length != 2) {
+                        Logger.error("Invalid proxy address: " + proxy[1]);
+                    } else {
+                        app.setProxy(new Proxy(type, new InetSocketAddress(addr[0], Integer.parseInt(addr[1]))));
+                    }
+                }
             }
         }
-
-        Logger.info("Creating domain key pair");
-        KeyPair domainKeyPair = keyPairGenerator.generateKeyPair();
-        FileWriter fileWriter = new FileWriter("private.key");
-        KeyPairUtils.writeKeyPair(domainKeyPair, fileWriter);
-        fileWriter.close();
-        Logger.info("Private key saved");
-
-        CSRBuilder csrb = new CSRBuilder();
-        for (String d : domainList){
-            csrb.addDomain(d);
-        }
-        csrb.setOrganization("SNCIDC");
-        csrb.sign(domainKeyPair);
-
-        Logger.info("Finalizing the order");
-        order.execute(csrb.getEncoded());
-
-        while (order.getStatus() != Status.VALID) {
-            Thread.sleep(3000L);
-            order.update();
-        }
-
-        Logger.info("Writing the certificate");
-        Certificate cert = order.getCertificate();
-        FileWriter crt = new FileWriter("cert.crt");
-        cert.writeCertificate(crt);
-        crt.close();
-
-        ByteArrayOutputStream privateKey = new ByteArrayOutputStream();
-        csrb.write(privateKey);
-        ByteArrayOutputStream publicKey = new ByteArrayOutputStream();
-        OutputStreamWriter writer = new OutputStreamWriter(publicKey);
-        cert.writeCertificate(writer);
-        writer.close();
-
-        uploadCert(privateKey.toByteArray(), publicKey.toByteArray());
-
-        Logger.info("All done");
-    }
-
-    private static void processAuth(Authorization auth) throws Exception{
-        Logger.info("Processing authorization for " + auth.getDomain());
-        Http01Challenge challenge = auth.findChallenge(Http01Challenge.TYPE);
-        String token = challenge.getToken();
-        String content = challenge.getAuthorization();
-        Logger.info("Token: " + token);
-        Logger.info("Content: " + content);
-        Logger.info("Connecting FTP server");
-
-        FTPClient ftpClient = new FTPClient();
-        ftpClient.setControlEncoding("UTF-8");
-        ftpClient.connect(address, 21);
-        ftpClient.login(ftpUser, ftpPass);
-        if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())){
-            Logger.info("Failed to connect to ftp server: " + address);
-            return;
-        }
-        ftpClient.enterLocalActiveMode();
-        ftpClient.changeWorkingDirectory(root);
-        ftpClient.makeDirectory(".well-known");
-        ftpClient.changeWorkingDirectory(".well-known");
-        ftpClient.makeDirectory("acme-challenge");
-        ftpClient.changeWorkingDirectory("acme-challenge");
-        if (!ftpClient.storeFile(token, new ByteArrayInputStream(content.getBytes()))){
-            Logger.info("Failed to upload challenge");
-            ftpClient.logout();
-            return;
-        }
-        ftpClient.logout();
-        Logger.info("Upload completed");
-        Logger.info("Triggering challenge");
-        challenge.trigger();
-
-        while (auth.getStatus() != Status.VALID) {
-            Thread.sleep(3000L);
-            auth.update();
-        }
-
-        Logger.info("Challenge completed");
-    }
-
-    private static void uploadCert(byte[] privateKey, byte[] publicKey) throws Exception{
-        Logger.info("Uploading keys");
-
-        FTPClient ftpClient = new FTPClient();
-        ftpClient.setControlEncoding("UTF-8");
-        ftpClient.connect(address, 21);
-        ftpClient.login(ftpUser, ftpPass);
-        if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())){
-            Logger.info("Failed to connect to ftp server: " + address);
-            return;
-        }
-        ftpClient.enterLocalActiveMode();
-        ftpClient.changeWorkingDirectory("/");
-        Logger.info("Uploading private key");
-        if (!ftpClient.storeFile("ssl.key", new ByteArrayInputStream(privateKey))){
-            Logger.info("Failed to upload private key");
-            ftpClient.logout();
-            return;
-        }
-        Logger.info("Uploading public key");
-        if (!ftpClient.storeFile("ssl.crt", new ByteArrayInputStream(publicKey))){
-            Logger.info("Failed to upload public key");
-            ftpClient.logout();
-            return;
-        }
-        ftpClient.logout();
+        app.run();
     }
 }
