@@ -49,14 +49,6 @@ public class SecureSNC {
         fpass.setRequired(true);
         options.addOption(fpass);
 
-        Option user = new Option("u", "user", true, "Username of panel");
-        user.setRequired(true);
-        options.addOption(user);
-
-        Option pass = new Option("p", "pass", true, "Password of panel");
-        pass.setRequired(true);
-        options.addOption(pass);
-
         Option root = new Option("r", "root", true, "Root of your website, default = /wwwroot");
         options.addOption(root);
 
@@ -91,8 +83,6 @@ public class SecureSNC {
 
     private static String domain;
     private static String address;
-    private static String user;
-    private static String pass;
     private static String ftpUser;
     private static String ftpPass;
     private static String root;
@@ -103,8 +93,6 @@ public class SecureSNC {
         root = cmd.getOptionValue("root") == null ? "/wwwroot" : cmd.getOptionValue("root");
         domain = cmd.getOptionValue("domain");
         address = cmd.getOptionValue("address");
-        user = cmd.getOptionValue("user");
-        pass = cmd.getOptionValue("pass");
         ftpUser = cmd.getOptionValue("ftp-user");
         ftpPass = cmd.getOptionValue("ftp-pass");
 
@@ -171,7 +159,9 @@ public class SecureSNC {
         cert.writeCertificate(writer);
         writer.close();
 
-        uploadCert(privateKey.toString(), publicKey.toString());
+        uploadCert(privateKey.toByteArray(), publicKey.toByteArray());
+
+        Logger.info("All done");
     }
 
     private static void processAuth(Authorization auth) throws Exception{
@@ -215,9 +205,31 @@ public class SecureSNC {
         Logger.info("Challenge completed");
     }
 
-    private static void uploadCert(String privateKey, String publicKey){
+    private static void uploadCert(byte[] privateKey, byte[] publicKey) throws Exception{
         Logger.info("Uploading keys");
-        Logger.info("Private key: " + privateKey);
-        Logger.info("Public key: " + publicKey);
+
+        FTPClient ftpClient = new FTPClient();
+        ftpClient.setControlEncoding("UTF-8");
+        ftpClient.connect(address, 21);
+        ftpClient.login(ftpUser, ftpPass);
+        if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())){
+            Logger.info("Failed to connect to ftp server: " + address);
+            return;
+        }
+        ftpClient.enterLocalActiveMode();
+        ftpClient.changeWorkingDirectory("/");
+        Logger.info("Uploading private key");
+        if (!ftpClient.storeFile("ssl.key", new ByteArrayInputStream(privateKey))){
+            Logger.info("Failed to upload private key");
+            ftpClient.logout();
+            return;
+        }
+        Logger.info("Uploading public key");
+        if (!ftpClient.storeFile("ssl.crt", new ByteArrayInputStream(publicKey))){
+            Logger.info("Failed to upload public key");
+            ftpClient.logout();
+            return;
+        }
+        ftpClient.logout();
     }
 }
