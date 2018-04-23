@@ -32,13 +32,17 @@ public class SecureSNC {
         address.setRequired(true);
         options.addOption(address);
 
-        Option user = new Option("u", "ftp-user", true, "Username of FTP server");
+        Option user = new Option("u", "user", true, "Username of control panel and FTP server");
         user.setRequired(true);
         options.addOption(user);
 
-        Option pass = new Option("p", "ftp-pass", true, "Password of FTP server");
+        Option pass = new Option("p", "pass", true, "Password of control panel");
         pass.setRequired(true);
         options.addOption(pass);
+
+        Option ftpPass = new Option("fp", "ftp-pass", true, "Password of FTP server");
+        ftpPass.setRequired(true);
+        options.addOption(ftpPass);
 
         Option root = new Option("r", "root", true, "Root of your website, default = /wwwroot");
         options.addOption(root);
@@ -75,7 +79,8 @@ public class SecureSNC {
     private static void run(CommandLine cmd) throws Exception{
         Application app = new Application(cmd.getOptionValue("domain"),
                 cmd.getOptionValue("address"),
-                cmd.getOptionValue("ftp-user"),
+                cmd.getOptionValue("user"),
+                cmd.getOptionValue("pass"),
                 cmd.getOptionValue("ftp-pass"),
                 cmd.getOptionValue("root") == null ? "/wwwroot" : cmd.getOptionValue("root"),
                 cmd.hasOption("test"));

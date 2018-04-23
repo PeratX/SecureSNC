@@ -1,5 +1,6 @@
 package org.itxtech.securesnc;
 
+import okhttp3.*;
 import org.itxtech.securesnc.util.AcmeUtils;
 import org.itxtech.securesnc.util.Logger;
 import org.shredzone.acme4j.*;
@@ -12,8 +13,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.net.Proxy;
 import java.security.KeyPair;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * SecureSNC
@@ -29,9 +33,36 @@ public class Application {
     private static final String PRODUCTION_SERVER = "acme://letsencrypt.org";
     private static final String TESTING_SERVER = "acme://letsencrypt.org/staging";
 
+    private static final OkHttpClient HTTP_CLIENT = new OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .cookieJar(new CookieJar() {
+                private HashMap<String, List<Cookie>> map = new HashMap<>();
+
+                @Override
+                public void saveFromResponse(HttpUrl httpUrl, List<Cookie> list) {
+                    map.put(httpUrl.host(), list);
+                }
+
+                @Override
+                public List<Cookie> loadForRequest(HttpUrl httpUrl) {
+                    List<Cookie> cookies = map.get(httpUrl.host());
+                    return cookies != null ? cookies : new ArrayList<>();
+                }
+            })
+            .addInterceptor((chain) ->{
+                        Request original = chain.request();
+                        Request request = original.newBuilder()
+                                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36")
+                                .build();
+                        return chain.proceed(request);
+                    }
+            )
+            .build();
+
     private String domain;
     private String address;
-    private String ftpUser;
+    private String user;
+    private String pass;
     private String ftpPass;
     private String root;
     private boolean test;
@@ -56,13 +87,15 @@ public class Application {
 
     public Application(String domain,
                        String address,
-                       String ftpUser,
+                       String user,
+                       String pass,
                        String ftpPass,
                        String root,
                        boolean test) {
         this.domain = domain;
         this.address = address;
-        this.ftpUser = ftpUser;
+        this.user = user;
+        this.pass = pass;
         this.ftpPass = ftpPass;
         this.root = root;
         this.test = test;
@@ -91,7 +124,7 @@ public class Application {
         Order order = account.newOrder()
                 .domains(domains)
                 .create();
-        client = new SncFtpClient(address, 21, ftpUser, ftpPass);
+        client = new SncFtpClient(address, 21, user, ftpPass);
         for (Authorization auth : order.getAuthorizations()) {
             if (auth.getStatus() != Status.VALID) {
                 processAuth(auth);
@@ -131,7 +164,7 @@ public class Application {
 
         publicKey = pubKey.toByteArray();
 
-        uploadCert(privateKey, publicKey);
+        uploadCert();
 
         Logger.info(SecureSNC.PROG_NAME + " done");
         completed = true;
@@ -149,7 +182,6 @@ public class Application {
         if (client.upload(root + "/.well-known/acme-challenge", token, new ByteArrayInputStream(content.getBytes()))){
             Logger.info("Challenge upload successfully");
         } else {
-            Logger.info(String.valueOf(client.getClient().getReplyString()));
             Logger.error("Challenge upload failed");
             System.exit(-1);
         }
@@ -164,10 +196,28 @@ public class Application {
         Logger.info("Challenge completed");
     }
 
-    private void uploadCert(byte[] privateKey, byte[] publicKey) throws Exception {
+    private void uploadCert() throws Exception{
         Logger.info("Uploading keys");
+        Request request = new Request.Builder()
+                .url("http://" + address + ":3312/vhost/index.php?c=session&a=login")
+                .post(new FormBody.Builder().add("username", user).add("passwd", pass).build())
+                .build();
+        Response response = HTTP_CLIENT.newCall(request).execute();
+        if (response.isSuccessful()){
+            Logger.info("Login successfully");
+            request = new Request.Builder()
+                    .url("http://" + address + ":3312/vhost/index.php?c=index&a=ssl")
+                    .post(new FormBody.Builder().add("certificate", new String(publicKey))
+                            .add("certificate_key", new String(privateKey)).build())
+                    .header("Referer", "http://" + address + ":3312/vhost/index.php?c=index&a=sslForm")
+                    .build();
+            response = HTTP_CLIENT.newCall(request).execute();
+            if (response.isSuccessful()){
+                Logger.info("Certificate uploaded successfully");
+            }
+        }
 
-        if (client.connectAndLogin()){
+        /*if (client.connectAndLogin()){
             if (client.uploadFile("/", "ssl.key", new ByteArrayInputStream(privateKey))){
                 Logger.info("Private key has been uploaded successfully");
             } else {
@@ -181,6 +231,6 @@ public class Application {
             client.getClient().logout();
         } else {
             Logger.error("Upload failed");
-        }
+        }*/
     }
 }
