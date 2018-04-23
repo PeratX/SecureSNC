@@ -1,12 +1,11 @@
 package org.itxtech.securesnc;
 
 import org.apache.commons.net.ftp.FTPClient;
-import org.apache.commons.net.ftp.FTPReply;
 import org.itxtech.securesnc.util.Logger;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * SecureSNC
@@ -31,13 +30,15 @@ public class SncFtpClient {
         this.pass = pass;
         this.port = port;
         client = new FTPClient();
-        client.setControlEncoding("UTF-8");
-        client.enterLocalPassiveMode();
     }
 
     public boolean connectAndLogin() throws Exception{
         client.connect(address, port);
-        return client.login(user, pass);
+        boolean result = client.login(user, pass);
+        if (result) {
+            client.enterLocalPassiveMode();
+        }
+        return result;
     }
 
     public boolean upload(String remotePath, String filename, InputStream stream){
@@ -65,10 +66,6 @@ public class SncFtpClient {
         return false;
     }
 
-    public FTPClient getClient() {
-        return client;
-    }
-
     private boolean checkDirectory(String path) throws Exception{
         //path must starts with /
         if (!path.startsWith("/")){
@@ -76,7 +73,8 @@ public class SncFtpClient {
         }
         client.changeWorkingDirectory("/");
         if (path.length() > 1) {
-            List<String> dirs = Arrays.asList(path.split("/"));
+            ArrayList<String> dirs = new ArrayList<>(Arrays.asList(path.split("/")));
+            dirs.remove(0);
             for (String dir : dirs) {
                 client.makeDirectory(dir);
                 client.changeWorkingDirectory(dir);
