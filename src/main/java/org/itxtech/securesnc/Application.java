@@ -1,7 +1,5 @@
 package org.itxtech.securesnc;
 
-import org.apache.commons.net.ftp.FTPClient;
-import org.apache.commons.net.ftp.FTPReply;
 import org.itxtech.securesnc.util.AcmeUtils;
 import org.itxtech.securesnc.util.Logger;
 import org.shredzone.acme4j.*;
@@ -39,14 +37,21 @@ public class Application {
     private boolean test;
 
     private boolean completed;
-
+    private Proxy proxy;
+    private SncFtpClient client;
     private byte[] privateKey;
     private byte[] publicKey;
 
-    private Proxy proxy;
-
     public boolean isCompleted() {
         return completed;
+    }
+
+    public byte[] getPublicKey() {
+        return publicKey;
+    }
+
+    public byte[] getPrivateKey() {
+        return privateKey;
     }
 
     public Application(String domain,
@@ -86,6 +91,7 @@ public class Application {
         Order order = account.newOrder()
                 .domains(domains)
                 .create();
+        client = new SncFtpClient(address, 21, ftpUser, ftpPass);
         for (Authorization auth : order.getAuthorizations()) {
             if (auth.getStatus() != Status.VALID) {
                 processAuth(auth);
@@ -94,6 +100,11 @@ public class Application {
 
         Logger.info("Creating domain key pair");
         KeyPair domainKeyPair = KeyPairUtils.createKeyPair(2048);
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        OutputStreamWriter writer = new OutputStreamWriter(stream);
+        KeyPairUtils.writeKeyPair(domainKeyPair, writer);
+        writer.close();
+        privateKey = stream.toByteArray();
 
         CSRBuilder csrb = new CSRBuilder();
         for (String d : domainList) {
@@ -113,19 +124,17 @@ public class Application {
         Logger.info("Writing the certificate");
         Certificate cert = order.getCertificate();
 
-        ByteArrayOutputStream privateKey = new ByteArrayOutputStream();
-        csrb.write(privateKey);
-        ByteArrayOutputStream publicKey = new ByteArrayOutputStream();
-        OutputStreamWriter writer = new OutputStreamWriter(publicKey);
+        ByteArrayOutputStream pubKey = new ByteArrayOutputStream();
+        writer = new OutputStreamWriter(pubKey);
         cert.writeCertificate(writer);
         writer.close();
 
-        this.privateKey = privateKey.toByteArray();
-        this.publicKey = publicKey.toByteArray();
+        publicKey = pubKey.toByteArray();
 
-        uploadCert(this.privateKey, this.publicKey);
+        uploadCert(privateKey, publicKey);
 
         Logger.info(SecureSNC.PROG_NAME + " done");
+        completed = true;
     }
 
     private void processAuth(Authorization auth) throws Exception {
@@ -135,29 +144,15 @@ public class Application {
         String content = challenge.getAuthorization();
         Logger.info("Token: " + token);
         Logger.info("Content: " + content);
-        Logger.info("Connecting FTP server");
+        Logger.info("Uploading challenge");
 
-        FTPClient ftpClient = new FTPClient();
-        ftpClient.setControlEncoding("UTF-8");
-        ftpClient.connect(address, 21);
-        ftpClient.login(ftpUser, ftpPass);
-        if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
-            Logger.info("Failed to connect to ftp server: " + address);
-            return;
+        if (client.upload(root + "/.well-known/acme-challenge", token, new ByteArrayInputStream(content.getBytes()))){
+            Logger.info("Challenge upload successfully");
+        } else {
+            Logger.info(String.valueOf(client.getClient().getReplyString()));
+            Logger.error("Challenge upload failed");
+            System.exit(-1);
         }
-        ftpClient.enterLocalActiveMode();
-        ftpClient.changeWorkingDirectory(root);
-        ftpClient.makeDirectory(".well-known");
-        ftpClient.changeWorkingDirectory(".well-known");
-        ftpClient.makeDirectory("acme-challenge");
-        ftpClient.changeWorkingDirectory("acme-challenge");
-        if (!ftpClient.storeFile(token, new ByteArrayInputStream(content.getBytes()))) {
-            Logger.info("Failed to upload challenge");
-            ftpClient.logout();
-            return;
-        }
-        ftpClient.logout();
-        Logger.info("Upload completed");
         Logger.info("Triggering challenge");
         challenge.trigger();
 
@@ -172,28 +167,20 @@ public class Application {
     private void uploadCert(byte[] privateKey, byte[] publicKey) throws Exception {
         Logger.info("Uploading keys");
 
-        FTPClient ftpClient = new FTPClient();
-        ftpClient.setControlEncoding("UTF-8");
-        ftpClient.connect(address, 21);
-        ftpClient.login(ftpUser, ftpPass);
-        if (!FTPReply.isPositiveCompletion(ftpClient.getReplyCode())) {
-            Logger.info("Failed to connect to ftp server: " + address);
-            return;
+        if (client.connectAndLogin()){
+            if (client.uploadFile("/", "ssl.key", new ByteArrayInputStream(privateKey))){
+                Logger.info("Private key has been uploaded successfully");
+            } else {
+                Logger.error("Private key upload failed");
+            }
+            if (client.uploadFile("/", "ssl.crt", new ByteArrayInputStream(publicKey))){
+                Logger.info("Public key has been uploaded successfully");
+            } else {
+                Logger.error("Public key upload failed");
+            }
+            client.getClient().logout();
+        } else {
+            Logger.error("Upload failed");
         }
-        ftpClient.enterLocalActiveMode();
-        ftpClient.changeWorkingDirectory("/");
-        Logger.info("Uploading private key");
-        if (!ftpClient.storeFile("ssl.key", new ByteArrayInputStream(privateKey))) {
-            Logger.info("Failed to upload private key");
-            ftpClient.logout();
-            return;
-        }
-        Logger.info("Uploading public key");
-        if (!ftpClient.storeFile("ssl.crt", new ByteArrayInputStream(publicKey))) {
-            Logger.info("Failed to upload public key");
-            ftpClient.logout();
-            return;
-        }
-        ftpClient.logout();
     }
 }

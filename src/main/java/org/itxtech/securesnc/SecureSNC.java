@@ -32,13 +32,13 @@ public class SecureSNC {
         address.setRequired(true);
         options.addOption(address);
 
-        Option fuser = new Option("u", "ftp-user", true, "Username of FTP server");
-        fuser.setRequired(true);
-        options.addOption(fuser);
+        Option user = new Option("u", "ftp-user", true, "Username of FTP server");
+        user.setRequired(true);
+        options.addOption(user);
 
-        Option fpass = new Option("p", "ftp-pass", true, "Password of FTP server");
-        fpass.setRequired(true);
-        options.addOption(fpass);
+        Option pass = new Option("p", "ftp-pass", true, "Password of FTP server");
+        pass.setRequired(true);
+        options.addOption(pass);
 
         Option root = new Option("r", "root", true, "Root of your website, default = /wwwroot");
         options.addOption(root);
