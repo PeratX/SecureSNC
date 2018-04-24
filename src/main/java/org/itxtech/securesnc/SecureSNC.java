@@ -40,10 +40,6 @@ public class SecureSNC {
         pass.setRequired(true);
         options.addOption(pass);
 
-        Option ftpPass = new Option("fp", "ftp-pass", true, "Password of FTP server");
-        ftpPass.setRequired(true);
-        options.addOption(ftpPass);
-
         Option root = new Option("r", "root", true, "Root of your website, default = /wwwroot");
         options.addOption(root);
 
@@ -81,7 +77,6 @@ public class SecureSNC {
                 cmd.getOptionValue("address"),
                 cmd.getOptionValue("user"),
                 cmd.getOptionValue("pass"),
-                cmd.getOptionValue("ftp-pass"),
                 cmd.getOptionValue("root") == null ? "/wwwroot" : cmd.getOptionValue("root"),
                 cmd.hasOption("test"));
         if (cmd.getOptionValue("proxy") != null) {
