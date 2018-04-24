@@ -28,7 +28,8 @@ public class SecureSNC {
         Logger.init();
         Logger.info(PROG_NAME + " 版本：" + VERSION);
         Logger.info("本程序遵循 GPLv3 协议开放源代码");
-        Logger.info("Copyright (C) 2018 PeratX, iTX Technologies");
+        Logger.info("Copyright (C) 2018 PeratX, iTX Technologies,");
+        Logger.info("                   Shenniao Technology Ltd.");
 
         Options options = new Options();
         Option domain = new Option("d", "domain", true, "需要申请证书的域名，暂不支持多个");

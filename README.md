@@ -12,9 +12,29 @@ SecureSNC
      -s,--save            保存公钥和私钥
      -t,--test            启用测试模式，无签发数量限制，但是签发的是无效证书
      -u,--user <arg>      控制面板的用户名
-     -y,--proxy <arg>     通过代理使用 ACME 协议，如：socks://127.0.0.1:1080（支持socks v4/v5和http）
+     -y,--proxy <arg>     通过代理使用 ACME 协议，如：socks://127.0.0.1:1080
+                          支持 socks v4/v5 和 http 协议的代理
+
+```bash
+$ ./securesnc -a 111.222.66.22 -d example.com -u admin -p 123456 -y socks://127.0.0.1:1080 -t -s
+```
+
+```batch
+X:\SecureSNC>./securesnc -a 111.222.66.22 -d example.com -u admin -p 123456 -y socks://127.0.0.1:1080 -t -s
+```
+
+构建
 ----------
-     java -jar securesnc.jar -a 111.222.66.22 -d example.com -u admin -p 123456 --proxy=socks://127.0.0.1:1080 -t
+* **[OracleJDK 8](http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html)** 或 **[OpenJDK 8](http://openjdk.java.net/projects/jdk8u/)**
+* **[Apache Maven](http://maven.apache.org)**
+
+```bash
+$ mvn clean install
+```
+
+```batch
+X:\SecureSNC>mvn clean install
+```
 
 许可证
 ----------
