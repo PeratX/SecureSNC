@@ -25,36 +25,42 @@ public class SecureSNC {
     public static final String VERSION = "1.0.0";
 
     public static void main(String[] args){
+        Logger.init();
+        Logger.info(PROG_NAME + " 版本：" + VERSION);
+        Logger.info("本程序遵循 GPLv3 协议开放源代码");
+        Logger.info("Copyright (C) 2018 PeratX, iTX Technologies");
+
         Options options = new Options();
-        Option domain = new Option("d", "domain", true, "Domains you want to apply, now only support 1");
+        Option domain = new Option("d", "domain", true, "需要申请证书的域名，暂不支持多个");
         domain.setRequired(true);
         options.addOption(domain);
 
-        Option address = new Option("a", "address", true, "Address to the panel of SNCIDC");
+        Option address = new Option("a", "address", true, "虚拟主机控制面板的地址");
         address.setRequired(true);
         options.addOption(address);
 
-        Option user = new Option("u", "user", true, "Username of control panel and FTP server");
+        Option user = new Option("u", "user", true, "控制面板的用户名");
         user.setRequired(true);
         options.addOption(user);
 
-        Option pass = new Option("p", "pass", true, "Password of control panel");
+        Option pass = new Option("p", "pass", true, "控制面板的密码");
         pass.setRequired(true);
         options.addOption(pass);
 
-        Option root = new Option("r", "root", true, "Root of your website, default = /wwwroot");
+        Option root = new Option("r", "root", true, "虚拟主机的根目录，默认为 /wwwroot");
         options.addOption(root);
 
-        Option test = new Option("t", "test", false, "Enable test mode, this will obtain a fake cert");
+        Option test = new Option("t", "test", false, "启用测试模式，无签发数量限制，但是签发的是无效证书");
         options.addOption(test);
 
-        Option proxy = new Option("y", "proxy", true, "Apply a proxy, example: socks://127.0.0.1:1080");
+        Option proxy = new Option("y", "proxy", true, "通过代理使用 ACME 协议，如：socks://127.0.0.1:1080" +
+                "\n支持 socks v4/v5 和 http 协议的代理");
         options.addOption(proxy);
 
-        Option save = new Option("s", "save", false, "Save private and public keys");
+        Option save = new Option("s", "save", false, "保存公钥和私钥");
         options.addOption(save);
 
-        CommandLineParser parser = new DefaultParser();
+        DefaultParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
         CommandLine cmd;
 
@@ -67,15 +73,12 @@ public class SecureSNC {
             return;
         }
 
-        Logger.init();
-        Logger.info(PROG_NAME + " " + VERSION);
-
         try {
             run(cmd);
         } catch (Exception e){
             Logger.logException(e);
         }
-        Logger.info(SecureSNC.PROG_NAME + " done");
+        Logger.info(SecureSNC.PROG_NAME + " 已完成所有操作");
     }
 
     private static void run(CommandLine cmd) throws Exception{
@@ -128,7 +131,7 @@ public class SecureSNC {
             writer.write(app.getPublicKey());
             writer.close();
 
-            Logger.info("Public and private keys has been saved to " + dir.getCanonicalPath());
+            Logger.info("证书已保存至 " + dir.getCanonicalPath());
         }
     }
 }

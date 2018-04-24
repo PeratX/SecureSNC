@@ -84,7 +84,7 @@ public class Logger {
     public static void send(String message, int logLevel) {
         if (logLevel >= verboseLevel) {
             try {
-                String fileDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss ").format(new Date());
+                String fileDateFormat = new SimpleDateFormat("HH:mm:ss ").format(new Date());
                 message = fileDateFormat + message;
                 if (checkBufferSize()) {
                     buffer.insert(0, "\n").insert(0, message);

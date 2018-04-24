@@ -10,9 +10,8 @@ SecureSNC
      -p,--pass <arg>      控制面板的密码
      -r,--root <arg>      虚拟主机的根目录，默认为 /wwwroot
      -s,--save            保存公钥和私钥
-
      -t,--test            启用测试模式，无签发数量限制，但是签发的是无效证书
-     -u,--user <arg>      控制面板的秘密
+     -u,--user <arg>      控制面板的用户名
      -y,--proxy <arg>     通过代理使用 ACME 协议，如：socks://127.0.0.1:1080（支持socks v4/v5和http）
 ----------
      java -jar securesnc.jar -a 111.222.66.22 -d example.com -u admin -p 123456 --proxy=socks://127.0.0.1:1080 -t

@@ -77,15 +77,15 @@ public class Application {
         String[] domains = domain.split(",");
         List<String> domainList = Arrays.asList(domains);
 
-        Logger.info("Obtaining certificate for " + domain);
-        Logger.info("Now using " + (test ? "Let's Encrypt testing server" : "Let's Encrypt production server"));
+        Logger.info("需要申请证书的域名：" + domain);
+        Logger.info("使用 Let's Encrypt " + (test ? "测试" : "生产") + " 服务器");
         Session session = new Session(test ? TESTING_SERVER : PRODUCTION_SERVER);
         if (proxy != null) {
             session.setProxy(proxy);
         }
-        Logger.info("Creating account and logging in");
+        Logger.info("创建账户并登录");
         Account account = AcmeUtils.createAccountAndLogin(session);
-        Logger.info("Ordering certificates");
+        Logger.info("请求证书");
         Order order = account.newOrder()
                 .domains(domains)
                 .create();
@@ -97,7 +97,7 @@ public class Application {
             }
         }
 
-        Logger.info("Creating domain key pair");
+        Logger.info("创建域名密钥对");
         KeyPair domainKeyPair = AcmeUtils.createKeyPair();
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         OutputStreamWriter writer = new OutputStreamWriter(stream);
@@ -112,7 +112,7 @@ public class Application {
         csrb.setOrganization("SNCIDC");
         csrb.sign(domainKeyPair);
 
-        Logger.info("Finalizing the order");
+        Logger.info("完成请求");
         order.execute(csrb.getEncoded());
 
         while (order.getStatus() != Status.VALID) {
@@ -120,7 +120,7 @@ public class Application {
             order.update();
         }
 
-        Logger.info("Writing the certificate");
+        Logger.info("保存证书");
         Certificate cert = order.getCertificate();
 
         ByteArrayOutputStream pubKey = new ByteArrayOutputStream();
@@ -135,21 +135,19 @@ public class Application {
     }
 
     private void processAuth(Authorization auth) throws Exception {
-        Logger.info("Processing authorization for " + auth.getDomain());
+        Logger.info("处理域名验证 " + auth.getDomain());
         Http01Challenge challenge = auth.findChallenge(Http01Challenge.TYPE);
         String token = challenge.getToken();
         String content = challenge.getAuthorization();
-        Logger.info("Token: " + token);
-        Logger.info("Content: " + content);
-        Logger.info("Uploading challenge");
+        Logger.info("上传验证文件");
 
         if (client.uploadFile(root + "/.well-known/acme-challenge", token, content.getBytes())) {
-            Logger.info("Challenge upload successfully");
+            Logger.info("验证文件已上传");
         } else {
-            Logger.error("Challenge upload failed");
+            Logger.error("验证文件上传失败");
             System.exit(-1);
         }
-        Logger.info("Triggering challenge");
+        Logger.info("请求验证");
         challenge.trigger();
 
         while (auth.getStatus() != Status.VALID) {
@@ -157,11 +155,11 @@ public class Application {
             auth.update();
         }
 
-        Logger.info("Challenge completed");
+        Logger.info("验证完成");
     }
 
     private void uploadCert() throws Exception{
-        Logger.info("Uploading keys");
+        Logger.info("上传证书");
         client.uploadCertificate(privateKey, publicKey);
     }
 }
