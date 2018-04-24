@@ -1,9 +1,15 @@
 package org.itxtech.securesnc.util;
 
+import org.bouncycastle.jcajce.provider.asymmetric.rsa.KeyPairGeneratorSpi;
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.shredzone.acme4j.Account;
 import org.shredzone.acme4j.AccountBuilder;
 import org.shredzone.acme4j.Session;
-import org.shredzone.acme4j.util.KeyPairUtils;
+
+import java.io.IOException;
+import java.io.Writer;
+import java.security.KeyPair;
+import java.security.SecureRandom;
 
 /**
  * SecureSNC
@@ -16,11 +22,25 @@ import org.shredzone.acme4j.util.KeyPairUtils;
  * @author PeratX
  */
 public class AcmeUtils {
+    private static final int DEFAULT_KEY_SIZE = 2048;
+
     public static Account createAccountAndLogin(Session session) throws Exception {
         return new AccountBuilder()
                 .addContact("mailto:ssl@sncidc.com")
                 .agreeToTermsOfService()
-                .useKeyPair(KeyPairUtils.createKeyPair(2048))
+                .useKeyPair(createKeyPair())
                 .createLogin(session).getAccount();
+    }
+
+    public static KeyPair createKeyPair(){
+        KeyPairGeneratorSpi generator = new KeyPairGeneratorSpi();
+        generator.initialize(DEFAULT_KEY_SIZE, new SecureRandom());
+        return generator.generateKeyPair();
+    }
+
+    public static void writeKeyPair(KeyPair keypair, Writer w) throws IOException {
+        try (JcaPEMWriter jw = new JcaPEMWriter(w)) {
+            jw.writeObject(keypair);
+        }
     }
 }

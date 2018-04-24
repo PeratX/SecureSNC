@@ -1,11 +1,10 @@
 package org.itxtech.securesnc;
 
 import org.itxtech.securesnc.util.AcmeUtils;
+import org.itxtech.securesnc.util.CSRBuilder;
 import org.itxtech.securesnc.util.Logger;
 import org.shredzone.acme4j.*;
 import org.shredzone.acme4j.challenge.Http01Challenge;
-import org.shredzone.acme4j.util.CSRBuilder;
-import org.shredzone.acme4j.util.KeyPairUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
@@ -99,10 +98,10 @@ public class Application {
         }
 
         Logger.info("Creating domain key pair");
-        KeyPair domainKeyPair = KeyPairUtils.createKeyPair(2048);
+        KeyPair domainKeyPair = AcmeUtils.createKeyPair();
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         OutputStreamWriter writer = new OutputStreamWriter(stream);
-        KeyPairUtils.writeKeyPair(domainKeyPair, writer);
+        AcmeUtils.writeKeyPair(domainKeyPair, writer);
         writer.close();
         privateKey = stream.toString();
 
