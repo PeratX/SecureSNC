@@ -46,7 +46,7 @@ public class SecureSNC {
         Option test = new Option("t", "test", false, "Enable test mode, this will obtain a fake cert");
         options.addOption(test);
 
-        Option proxy = new Option("y", "proxy", false, "Apply a proxy, example: socks://127.0.0.1:1080");
+        Option proxy = new Option("y", "proxy", true, "Apply a proxy, example: socks://127.0.0.1:1080");
         options.addOption(proxy);
 
         CommandLineParser parser = new DefaultParser();
