@@ -1,6 +1,5 @@
 package org.itxtech.securesnc;
 
-
 import okhttp3.*;
 
 import java.util.ArrayList;

@@ -20,7 +20,7 @@ import java.net.Proxy;
  */
 public class SecureSNC {
     public static final String PROG_NAME = "SecureSNC";
-    public static final String VERSION = "0.1.0-alpha";
+    public static final String VERSION = "1.0.0";
 
     public static void main(String[] args){
         Options options = new Options();

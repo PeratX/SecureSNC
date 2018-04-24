@@ -1,6 +1,6 @@
 SecureSNC
 ============
-一键给[什鸟科技](https：//www.sncidc.com)的虚拟主机安装 [Let's Encrypt](https://letsencrypt.org/) 免费证书
+一键给[什鸟科技](https://www.sncidc.com)的虚拟主机安装 [Let's Encrypt](https://letsencrypt.org/) 免费证书
 
 使用
 ----------
@@ -13,7 +13,7 @@ SecureSNC
      -u,--user <arg>      控制面板的秘密
      -y,--proxy           通过代理使用 ACME 协议，如：socks://127.0.0.1:1080（支持socks v4/v5和http）
 ----------
-     securesnc -a 111.222.66.22 -d example.com -u admin -p 123456 --proxy=socks://127.0.0.1:1080 -t
+     java -jar securesnc.jar -a 111.222.66.22 -d example.com -u admin -p 123456 --proxy=socks://127.0.0.1:1080 -t
 
 许可证
 ----------
