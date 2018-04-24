@@ -3,6 +3,8 @@ package org.itxtech.securesnc;
 import org.apache.commons.cli.*;
 import org.itxtech.securesnc.util.Logger;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 
@@ -49,6 +51,9 @@ public class SecureSNC {
         Option proxy = new Option("y", "proxy", true, "Apply a proxy, example: socks://127.0.0.1:1080");
         options.addOption(proxy);
 
+        Option save = new Option("s", "save", false, "Save private and public keys");
+        options.addOption(save);
+
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
         CommandLine cmd;
@@ -70,10 +75,12 @@ public class SecureSNC {
         } catch (Exception e){
             Logger.logException(e);
         }
+        Logger.info(SecureSNC.PROG_NAME + " done");
     }
 
     private static void run(CommandLine cmd) throws Exception{
-        Application app = new Application(cmd.getOptionValue("domain"),
+        String domain = cmd.getOptionValue("domain");
+        Application app = new Application(domain,
                 cmd.getOptionValue("address"),
                 cmd.getOptionValue("user"),
                 cmd.getOptionValue("pass"),
@@ -108,5 +115,20 @@ public class SecureSNC {
             }
         }
         app.run();
+        if (cmd.hasOption("save")) {
+            File dir = new File(domain);
+            if (!dir.exists()) {
+                dir.mkdir();
+            }
+            FileWriter writer = new FileWriter(domain + "/private.key");
+            writer.write(app.getPrivateKey());
+            writer.close();
+
+            writer = new FileWriter(domain + "/certificate.crt");
+            writer.write(app.getPublicKey());
+            writer.close();
+
+            Logger.info("Public and private keys has been saved to " + dir.getCanonicalPath());
+        }
     }
 }

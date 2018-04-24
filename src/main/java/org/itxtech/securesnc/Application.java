@@ -28,8 +28,6 @@ public class Application {
     private static final String PRODUCTION_SERVER = "acme://letsencrypt.org";
     private static final String TESTING_SERVER = "acme://letsencrypt.org/staging";
 
-
-
     private String domain;
     private String address;
     private String user;
@@ -134,8 +132,6 @@ public class Application {
         publicKey = pubKey.toString();
 
         uploadCert();
-
-        Logger.info(SecureSNC.PROG_NAME + " done");
         completed = true;
     }
 
